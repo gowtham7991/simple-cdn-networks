@@ -1,50 +1,70 @@
 #!/usr/bin/python3
-
 """Strategy: Always origin"""
 import argparse
+import logging
 import socket
+from typing import Tuple
 
 from dnslib import *
 
+
+def get_ip_address():
+    """Get local IP address.
+
+    Returns
+    -------
+    IPv4Address
+        Local IP address
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    return s.getsockname()[0]
+
+
 ORIGIN = "cs5700cdnorigin.ccs.neu.edu"
 ORIGIN_IP = socket.gethostbyname(ORIGIN)
-def resolve(client_ip): return ORIGIN_IP
 
 
-parser = argparse.ArgumentParser(description='DNS Server')
-localIP = "127.0.0.1"
+def resolve(client_address: Tuple[str, int])->str:
+    return ORIGIN_IP
 
-localPort = 5354
 
-bufferSize = 1024
+def parse_args():
+    parser = argparse.ArgumentParser(description='DNS Server')
+    parser.add_argument("-p",
+                        "--port",
+                        required=True,
+                        type=int,
+                        help='Port to listen on')
+    parser.add_argument("-n",
+                        "--name",
+                        required=True,
+                        help='CDN specific name')
+    return parser.parse_args()
 
-msgFromServer = "Hello UDP Client"
 
-bytesToSend = str.encode(msgFromServer)
+def serve_dns(port, server_domain):
 
-# Create a datagram socket
+    localIP = get_ip_address()
+    bufferSize = 1024
 
-UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    udp_sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    udp_sock.bind((localIP, port))
+    logging.info(f"Listening on {localIP}:{port}")
 
-# Bind to address and ip
+    while True:
+        message, address = udp_sock.recvfrom(bufferSize)
+        query = DNSRecord.parse(message)
+        logging.debug(f"Received {query} from {address}")
+        repsonse = DNSRecord(DNSHeader(id=query.header.id, qr=0, aa=1,
+                                          ra=1),
+                                a=RR(server_domain,
+                                     rdata=A(resolve(address))))
+        logging.debug(f"Sending {repsonse} to {address}")
+        udp_sock.sendto(repsonse.pack(), address)
 
-UDPServerSocket.bind((localIP, localPort))
 
-print("UDP server up and listening")
-
-# Listen for incoming datagrams
-
-while True:
-
-    bytesAddressPair = UDPServerSocket.recvfrom(bufferSize)
-
-    message = bytesAddressPair[0]
-
-    address = bytesAddressPair[1]
-
-    message = DNSRecord.parse(message)
-    domain = message.q.qname
-    bytesToSend = DNSRecord(DNSHeader(id=message.header.id, qr=0, aa=1, ra=1), a=RR(domain,rdata=A(resolve(domain)))).pack()
-    # Sending a reply to client
-
-    UDPServerSocket.sendto(bytesToSend, address)
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    args = parse_args()
+    serve_dns(args.port, args.name)
