@@ -1,0 +1,50 @@
+#!/usr/bin/python3
+
+"""Strategy: Always origin"""
+import argparse
+import socket
+
+from dnslib import *
+
+ORIGIN = "cs5700cdnorigin.ccs.neu.edu"
+ORIGIN_IP = socket.gethostbyname(ORIGIN)
+def resolve(client_ip): return ORIGIN_IP
+
+
+parser = argparse.ArgumentParser(description='DNS Server')
+localIP = "127.0.0.1"
+
+localPort = 5354
+
+bufferSize = 1024
+
+msgFromServer = "Hello UDP Client"
+
+bytesToSend = str.encode(msgFromServer)
+
+# Create a datagram socket
+
+UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+
+# Bind to address and ip
+
+UDPServerSocket.bind((localIP, localPort))
+
+print("UDP server up and listening")
+
+# Listen for incoming datagrams
+
+while True:
+
+    bytesAddressPair = UDPServerSocket.recvfrom(bufferSize)
+
+    message = bytesAddressPair[0]
+
+    address = bytesAddressPair[1]
+
+    message = DNSRecord.parse(message)
+    domain = message.q.qname
+    bytesToSend = DNSRecord(DNSHeader(id=message.header.id, qr=0, aa=1, ra=1), a=RR(domain,rdata=A(resolve(domain)))).pack()
+    # Sending a reply to client
+
+    UDPServerSocket.sendto(bytesToSend, address)
