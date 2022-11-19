@@ -5,16 +5,17 @@ import time
 origin = "http://proj4-repl1.5700.network/"
 port = 8080
 
-
 def getList():
     fd = open("pageviews.csv", "r")
     views = fd.read()
+    fd.close()
     ls = views.split("\n")[2:]
     ls = [_.split(",") for _ in ls]
     queries = []
     for item in ls:
         item = item[-1]
         queries.append("/" + item.replace(" ", "_"))
+    
     return queries
         
 
