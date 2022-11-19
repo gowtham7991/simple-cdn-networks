@@ -5,6 +5,10 @@ import time
 origin = "http://proj4-repl1.5700.network/"
 port = 8080
 
+# install locust
+# cmd to run: locust -f replica_stress_test.py --host http://cs5700cdnorigin.ccs.neu.edu:8080
+# open web browser: localhost:8089
+
 def getList():
     fd = open("pageviews.csv", "r")
     views = fd.read()
