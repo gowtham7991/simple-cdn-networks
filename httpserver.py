@@ -1,47 +1,32 @@
-import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import socket
-import requests
-import logging
+from aiohttp import web
+from aiohttp import ClientSession
+from functools import cache
 
-def main():
-    logging.basicConfig(level=logging.DEBUG)
-    for i in range(len(sys.argv)):
-        if sys.argv[i] == "-p":
-            PORT = int(sys.argv[i+1])
-        elif sys.argv[i] == "-o":
-            ORIGIN = sys.argv[i+1]
-    #ORIGIN = "http://cs5700cdnorigin.ccs.neu.edu"
-    create(PORT)
+app = web.Application()
+routes = web.RouteTableDef()
+cache = {}
 
 
-
-def create(port:int) -> HTTPServer:
-    webServer = HTTPServer((getLocalIp(), port), getHandler)
-    logging.info(f"listening on {getLocalIp()}:{port}")
-    webServer.serve_forever()
-
-class getHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        try:
-            re = requests.get(f"http://cs5700cdnorigin.ccs.neu.edu:8080{self.path}")
-            self.wfile.write(bytes(re.content))
-        except Exception:
-            self.wfile.write(bytes(b"request to origin failed"))
-
-def getLocalIp():
-    # Create epemeral socket to get IP address
-    # NOTE: socket.gethostbyname(socket.gethostname()) returns localhost on
-    # Ubuntu 22.04
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    local_ip = s.getsockname()[0]
-    s.close()
-    return local_ip
+async def fetch_from_origin(path):
+    if path in cache:
+        return cache[path]
+    async with ClientSession() as session:
+        async with session.get(
+                f"http://cs5700cdnorigin.ccs.neu.edu:8080/{path}") as resp:
+            cache[path] = await resp.text()
+            return cache[path]
 
 
-if __name__ == "__main__":
-    main()
+@routes.get("/grading/beacon")
+async def beacon(request):
+    return web.Response(text="", status=204)
+
+
+@routes.get("/{path:.*}")
+async def proxy(request):
+    resp = await fetch_from_origin(request.match_info["path"])
+    return web.Response(text=resp, content_type="text/html")
+
+
+app.add_routes(routes)
+web.run_app(app, port=25015)
