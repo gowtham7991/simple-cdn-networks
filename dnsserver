@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """Strategy: Always origin"""
 import argparse
 import logging
@@ -78,13 +79,16 @@ def find_location_coordinates(ip):
     return (lat, lon)
 
 def resolve(client_address: Tuple[str, int])-> Tuple[str, str]:
+    time.sleep(1)
     client_ip = client_address[0]
     
-    if client_ip not in CLIENT_REPLICA_ROUTING_TABLE:
-        closest_server = find_closest_replica_server(client_ip)
-        CLIENT_REPLICA_ROUTING_TABLE[client_ip] = {'replica_server' : closest_server, 'latency': inf}
+    # if client_ip not in CLIENT_REPLICA_ROUTING_TABLE:
+    #     closest_server = find_closest_replica_server(client_ip)
+    #     CLIENT_REPLICA_ROUTING_TABLE[client_ip] = {'replica_server' : closest_server, 'latency': inf}
 
-    return (REPLICA_SERVERS[ CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server']], CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server'])
+    # return (REPLICA_SERVERS[ CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server']], CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server'])
+    
+    return find_closest_replica_server(client_ip)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DNS Server')
@@ -100,7 +104,6 @@ def parse_args():
     return parser.parse_args()
 
 def serve_dns(port, server_domain):
-
     localIP = get_ip_address()
     bufferSize = 1024
 
@@ -121,25 +124,31 @@ def serve_dns(port, server_domain):
         udp_sock.sendto(repsonse.pack(), address)
 
 def update_client_replica_routing():
-    for replica in REPLICA_SERVERS.keys():
-        response = requests.get('http://' + replica + '/ping')
-        data = response.json()
+    while True:
+        for replica in REPLICA_SERVERS.keys():
+            response = requests.get('http://' + replica + '/ping')
+            data = response.json()
 
-        for client in data:
-            if data[client] < CLIENT_REPLICA_ROUTING_TABLE[client]['latency']:
-                CLIENT_REPLICA_ROUTING_TABLE[client]['replica_server'] = replica
-                CLIENT_REPLICA_ROUTING_TABLE[client]['latency'] = data[client] 
+            for client in data:
+                if data[client] < CLIENT_REPLICA_ROUTING_TABLE[client]['latency']:
+                    CLIENT_REPLICA_ROUTING_TABLE[client]['replica_server'] = replica
+                    CLIENT_REPLICA_ROUTING_TABLE[client]['latency'] = data[client] 
+        time.sleep(UPDATE_ROUTING_TABLE_FREQUENCY)
 
 def ping_replica_servers():
-    for replica in REPLICA_SERVERS.keys():
-        requests.post('http://' + replica + '/ping', json = list(CLIENT_REPLICA_ROUTING_TABLE.keys()))
-    threading.Timer(PING_REPLICA_SERVERS_FREQUENCY, ping_replica_servers).start()
+    while True:
+        for replica in REPLICA_SERVERS.keys():
+            requests.post('http://' + replica + '/ping', json = list(CLIENT_REPLICA_ROUTING_TABLE.keys()))
+        time.sleep(PING_REPLICA_SERVERS_FREQUENCY)
     
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
-    update_client_replica_routing()
-    ping_replica_servers()
-    threading.Timer(UPDATE_ROUTING_TABLE_FREQUENCY, update_client_replica_routing).start()
+    
+    # ping_thread = threading.Thread(ping_replica_servers)
+    # update_thread = threading.Thread(update_client_replica_routing)
+
+    # ping_thread.start()
+    # update_thread.start()
     
     serve_dns(args.port)

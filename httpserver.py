@@ -1,3 +1,4 @@
+import time
 from aiohttp import web
 from aiohttp import ClientSession
 from functools import cache
@@ -25,6 +26,7 @@ async def beacon(request):
 @routes.get("/{path:.*}")
 async def proxy(request):
     resp = await fetch_from_origin(request.match_info["path"])
+    time.sleep(5)
     return web.Response(text=resp, content_type="text/html")
 
 
