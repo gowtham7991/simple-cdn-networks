@@ -82,13 +82,11 @@ def resolve(client_address: Tuple[str, int])-> Tuple[str, str]:
     time.sleep(1)
     client_ip = client_address[0]
     
-    # if client_ip not in CLIENT_REPLICA_ROUTING_TABLE:
-    #     closest_server = find_closest_replica_server(client_ip)
-    #     CLIENT_REPLICA_ROUTING_TABLE[client_ip] = {'replica_server' : closest_server, 'latency': inf}
+    if client_ip not in CLIENT_REPLICA_ROUTING_TABLE:
+        closest_server = find_closest_replica_server(client_ip)
+        CLIENT_REPLICA_ROUTING_TABLE[client_ip] = {'replica_server' : closest_server, 'latency': inf}
 
-    # return (REPLICA_SERVERS[ CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server']], CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server'])
-    
-    return find_closest_replica_server(client_ip)
+    return (REPLICA_SERVERS[ CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server']], CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server'])
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DNS Server')
@@ -145,10 +143,10 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
     
-    # ping_thread = threading.Thread(ping_replica_servers)
-    # update_thread = threading.Thread(update_client_replica_routing)
+    ping_thread = threading.Thread(ping_replica_servers)
+    update_thread = threading.Thread(update_client_replica_routing)
 
-    # ping_thread.start()
-    # update_thread.start()
+    ping_thread.start()
+    update_thread.start()
     
     serve_dns(args.port)
