@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-"""Strategy: Always origin"""
 import argparse
 import logging
 import socket
@@ -28,14 +27,16 @@ def get_ip_address():
 ORIGIN = "cs5700cdnorigin.ccs.neu.edu"
 ORIGIN_IP = socket.gethostbyname(ORIGIN)
 CLIENT_REPLICA_ROUTING_TABLE = {}
-REPLICA_SERVERS = {'139.144.30.25' : 'proj4-repl1.5700.network',
-                   '173.255.210.124' : 'proj4-repl2.5700.network',
-                    '139.144.69.56' : 'proj4-repl3.5700.network',
-                    '185.3.95.25' : 'proj4-repl4.5700.network',
-                    '139.162.83.107' : 'proj4-repl5.5700.network',
-                    '192.46.211.228' : 'proj4-repl6.5700.network',
-                    '170.187.240.5' : 'proj4-repl7.5700.network'
+REPLICA_SERVERS = {'139.144.30.25' : {'latitude' : 37.751, 'longitude' : -97.822},
                 }
+
+# '173.255.210.124' : 'proj4-repl2.5700.network',
+# '139.144.69.56' : 'proj4-repl3.5700.network',
+# '185.3.95.25' : 'proj4-repl4.5700.network',
+# '139.162.83.107' : 'proj4-repl5.5700.network',
+# '192.46.211.228' : 'proj4-repl6.5700.network',
+# '170.187.240.5' : 'proj4-repl7.5700.network'
+
 UPDATE_ROUTING_TABLE_FREQUENCY = 300
 PING_REPLICA_SERVERS_FREQUENCY = 100
 
@@ -46,7 +47,7 @@ def find_closest_replica_server(source_ip):
     closest_server = list(REPLICA_SERVERS.keys())[0]
 
     for server in REPLICA_SERVERS.keys():
-        server_coordinates = find_location_coordinates(server)
+        server_coordinates = (REPLICA_SERVERS[server]['latitude'], REPLICA_SERVERS[server]['longitude'])
         dist = distance_between_locations(server_coordinates, source_coordinates)
         if dist < min_dist:
             closest_server = server
@@ -108,7 +109,7 @@ def parse_args():
                         help='CDN specific name')
     return parser.parse_args()
 
-def serve_dns(port, server_domain):
+def serve_dns(port):
 
     localIP = get_ip_address()
     bufferSize = 1024
@@ -131,7 +132,7 @@ def serve_dns(port, server_domain):
 def update_client_replica_routing():
     while True:
         for replica in REPLICA_SERVERS.keys():
-            response = requests.get('http://' + replica + '/ping')
+            response = requests.get('http://' + replica + ':25015/ping')
             data = response.json()
 
             for client in data:
@@ -143,15 +144,15 @@ def update_client_replica_routing():
 def ping_replica_servers():
     while True:
         for replica in REPLICA_SERVERS.keys():
-            requests.post('http://' + replica + '/ping', json = list(CLIENT_REPLICA_ROUTING_TABLE.keys()))
+            requests.post('http://' + replica + ':25015/ping', json = list(CLIENT_REPLICA_ROUTING_TABLE.keys()))
         time.sleep(PING_REPLICA_SERVERS_FREQUENCY)
     
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
     
-    ping_thread = threading.Thread(ping_replica_servers)
-    update_thread = threading.Thread(update_client_replica_routing)
+    ping_thread = threading.Thread(target=ping_replica_servers)
+    update_thread = threading.Thread(target=update_client_replica_routing)
 
     ping_thread.start()
     update_thread.start()
