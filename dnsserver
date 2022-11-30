@@ -69,12 +69,12 @@ def distance_between_locations(loc1, loc2):
     return(c * r)
 
 def find_location_coordinates(ip):
-    url = 'http://ipinfo.io/' + ip + '/json'
+    url = 'https://geolocation-db.com/jsonp/' + ip
     response = urlopen(url)
     data = json.load(response)
-    print(data)
-    lat = float(data['loc'].split(",")[0])
-    lon = float(data['loc'].split(",")[1])
+
+    lat = float(data['latitude'])
+    lon = float(data['longitude'])
     
     return (lat, lon)
 
@@ -102,6 +102,7 @@ def parse_args():
     return parser.parse_args()
 
 def serve_dns(port, server_domain):
+
     localIP = get_ip_address()
     bufferSize = 1024
 
@@ -113,11 +114,10 @@ def serve_dns(port, server_domain):
         message, address = udp_sock.recvfrom(bufferSize)
         query = DNSRecord.parse(message)
         logging.debug(f"Received {query} from {address}")
-        server_domain, server_ip = resolve(address)
-        repsonse = DNSRecord(DNSHeader(id=query.header.id, qr=0, aa=1,
-                                          ra=1),
-                                a=RR(server_domain,
-                                     rdata=A(server_ip)))
+        question = str(query.q).split()[0][1:-1]
+        repsonse = DNSRecord(DNSHeader(id=query.header.id, qr=1, aa=0, ra=1),
+                             q=DNSQuestion(question),
+                             a=RR(question, rdata=A(resolve(address))))
         logging.debug(f"Sending {repsonse} to {address}")
         udp_sock.sendto(repsonse.pack(), address)
 
