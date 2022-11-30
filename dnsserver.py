@@ -35,7 +35,7 @@ def find_closest_replica_server(source_ip):
     source_coordinates = find_location_coordinates(source_ip)
     
     min_dist = inf
-    closest_server = REPLICA_SERVERS.keys()[0]
+    closest_server = list(REPLICA_SERVERS.keys())[0]
 
     for server in REPLICA_SERVERS.keys():
         server_coordinates = find_location_coordinates(server)
@@ -132,14 +132,14 @@ def update_client_replica_routing():
 
 def ping_replica_servers():
     for replica in REPLICA_SERVERS.keys():
-        body = {'clients' : list(CLIENT_REPLICA_ROUTING_TABLE.keys())}
-        requests.post('http://' + replica + '/ping', json = body)
-
+        requests.post('http://' + replica + '/ping', json = list(CLIENT_REPLICA_ROUTING_TABLE.keys()))
+    threading.Timer(PING_REPLICA_SERVERS_FREQUENCY, ping_replica_servers).start()
+    
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
     update_client_replica_routing()
     ping_replica_servers()
     threading.Timer(UPDATE_ROUTING_TABLE_FREQUENCY, update_client_replica_routing).start()
-    threading.Timer(PING_REPLICA_SERVERS_FREQUENCY, ping_replica_servers).start()
-    serve_dns(args.port, args.name)
+    
+    serve_dns(args.port)
