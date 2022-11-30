@@ -28,7 +28,14 @@ def get_ip_address():
 ORIGIN = "cs5700cdnorigin.ccs.neu.edu"
 ORIGIN_IP = socket.gethostbyname(ORIGIN)
 CLIENT_REPLICA_ROUTING_TABLE = {}
-REPLICA_SERVERS = {'139.144.30.25' : 'proj4-repl1.5700.network'}
+REPLICA_SERVERS = {'139.144.30.25' : 'proj4-repl1.5700.network',
+                   '173.255.210.124' : 'proj4-repl2.5700.network',
+                    '139.144.69.56' : 'proj4-repl3.5700.network',
+                    '185.3.95.25' : 'proj4-repl4.5700.network',
+                    '139.162.83.107' : 'proj4-repl5.5700.network',
+                    '192.46.211.228' : 'proj4-repl6.5700.network',
+                    '170.187.240.5' : 'proj4-repl7.5700.network'
+                }
 UPDATE_ROUTING_TABLE_FREQUENCY = 300
 PING_REPLICA_SERVERS_FREQUENCY = 100
 
@@ -78,7 +85,7 @@ def find_location_coordinates(ip):
     
     return (lat, lon)
 
-def resolve(client_address: Tuple[str, int])-> Tuple[str, str]:
+def resolve(client_address: Tuple[str, int])-> str:
     time.sleep(1)
     client_ip = client_address[0]
     
@@ -86,7 +93,7 @@ def resolve(client_address: Tuple[str, int])-> Tuple[str, str]:
         closest_server = find_closest_replica_server(client_ip)
         CLIENT_REPLICA_ROUTING_TABLE[client_ip] = {'replica_server' : closest_server, 'latency': inf}
 
-    return (REPLICA_SERVERS[ CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server']], CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server'])
+    return CLIENT_REPLICA_ROUTING_TABLE[client_ip]['replica_server']
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DNS Server')

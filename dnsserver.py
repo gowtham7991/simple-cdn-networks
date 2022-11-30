@@ -43,7 +43,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def serve_dns(port, server_domain):
+def serve_dns(port):
 
     localIP = get_ip_address()
     bufferSize = 1024
@@ -67,4 +67,4 @@ def serve_dns(port, server_domain):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
-    serve_dns(args.port, args.name)
+    serve_dns(args.port)
