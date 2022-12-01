@@ -1,14 +1,16 @@
 import logging
+import os
+import subprocess
 from aiohttp import web
 from aiohttp import ClientSession
 import brotli
-import py7zr
+import tarfile
 
 logging.basicConfig(level=logging.DEBUG)
 app = web.Application()
 routes = web.RouteTableDef()
 RAM_CACHE = {}
-DISK_CACHE = py7zr.SevenZipFile("disk.7z", mode="r")
+DISK_CACHE = tarfile.open("disk.tar", "r")
 
 
 async def fetch_from_origin(path):
@@ -37,10 +39,12 @@ async def proxy(request):
     path = request.match_info["path"]
     if path in RAM_CACHE:
         response = brotli.decompress(RAM_CACHE[path]).decode()
-    elif path in DISK_CACHE.getnames():
-        response = DISK_CACHE.read(path)[path].read().decode()
-        DISK_CACHE.reset()
-    else:
+        return web.Response(text=response, content_type="text/html")
+    try:
+        f = DISK_CACHE.extractfile(path)
+        return web.Response(text=brotli.decompress(f.read()).decode(),
+                            content_type="text/html")
+    except KeyError:
         response = await fetch_from_origin(path)
     return web.Response(text=response, content_type="text/html")
 
