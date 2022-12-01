@@ -56,37 +56,59 @@ web.run_app(app, port=25015)
 from aiohttp import web
 from aiohttp import ClientSession
 from functools import cache
-import scamp
+import json
+import subprocess
+import re
 
 app = web.Application()
 routes = web.RouteTableDef()
 cache = {}
+FILE = "out.json"
+clients = set()
+rttList = {}
 
+# TODO: Cache with expiry
+def measureMultiplePing(addresses):
+    cmd = ["scamper","-i","-c", "ping -c 1", *addresses]
+    scamp = subprocess.Popen(cmd,stdout=subprocess.PIPE)
+    result = scamp.stdout.read().decode()
+    result = result.split("---\n")
+    times = []
+    for item in result:
+        if matches := re.findall("time=([0-9.]+)", item):
+            currTime=matches[0]
+        else:
+            currTime = "inf"
+        times.append(float(currTime))
+    return {client:{"rtt":rtt} for client, rtt in zip(addresses,times)}
 
 async def fetch_from_origin(path):
     if path in cache:
         return cache[path]
     async with ClientSession() as session:
-        async with session.get(
-                f"http://cs5700cdnorigin.ccs.neu.edu:8080/{path}") as resp:
+        async with session.get(f"http://cs5700cdnorigin.ccs.neu.edu:8080/{path}") as resp:
             cache[path] = await resp.text()
             return cache[path]
-
 
 @routes.get("/grading/beacon")
 async def beacon(request):
     return web.Response(text="", status=204)
 
+@routes.post("/ping")
+async def updateClients(request):
+    global clients
+    incomingClients = set(await request.json()) 
+    clients |= incomingClients
+    return web.Response(text="",status=200)
+
+@routes.get("/ping")
+async def ping(request):
+    return web.json_response(measureMultiplePing(list(clients)))
 
 @routes.get("/{path:.*}")
 async def proxy(request):
     resp = await fetch_from_origin(request.match_info["path"])
     return web.Response(text=resp, content_type="text/html")
-
-@routes.get("/ping?client=*")
-async def ping(request):
-    time = await scamp.measurePing(request.match_info["path"][12:])
-    return web.Response(text=time, content_type="text/html")
 
 app.add_routes(routes)
 web.run_app(app, port=25015)
