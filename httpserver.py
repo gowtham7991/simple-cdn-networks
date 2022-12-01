@@ -2,10 +2,12 @@ from functools import lru_cache
 import logging
 import re
 import subprocess
+import time
 from aiohttp import web
 from aiohttp import ClientSession
 import brotli
 import tarfile
+import time
 
 logging.basicConfig(level=logging.DEBUG)
 app = web.Application()
@@ -14,10 +16,16 @@ RAM_CACHE = {}
 DISK_CACHE = tarfile.open("disk.tar", "r")
 CLIENTS = set()
 
+PING_CACHE = {}
+PING_CACHE_EXPIRY = 100  # seconds
 
-@lru_cache(maxsize=3)
+
 def measureMultiplePing(addresses):
     if len(addresses) == 0: return {}
+    if addresses in PING_CACHE and PING_CACHE[addresses][
+            'expiry'] >= time.time():
+        return PING_CACHE[addresses]['result']
+    PING_CACHE.clear()
     cmd = ["scamper", "-i", "-c", "ping -c 1", *addresses]
     scamp = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     result = scamp.stdout.read().decode()
@@ -29,7 +37,12 @@ def measureMultiplePing(addresses):
         else:
             currTime = "inf"
         times.append(float(currTime))
-    return {client: {"rtt": rtt} for client, rtt in zip(addresses, times)}
+    result = {client: {"rtt": rtt} for client, rtt in zip(addresses, times)}
+    PING_CACHE[addresses] = {
+        'expiry': time.time() + PING_CACHE_EXPIRY,
+        'result': result
+    }
+    return result
 
 
 async def fetch_from_origin(path):
