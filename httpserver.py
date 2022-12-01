@@ -23,9 +23,11 @@ async def fetch_from_origin(path):
 
 @routes.post("/preload")
 async def preload(request):
-    for page in await request.json():
-        body = await fetch_from_origin(page)
-        RAM_CACHE[page] = brotli.compress(body.encode())
+    global RAM_CACHE
+    RAM_CACHE = {
+        page: brotli.compress((await fetch_from_origin(page)).encode())
+        for page in await request.json()
+    }
     return web.Response(status=204)
 
 
@@ -41,12 +43,12 @@ async def proxy(request):
         response = brotli.decompress(RAM_CACHE[path]).decode()
         return web.Response(text=response, content_type="text/html")
     try:
-        f = DISK_CACHE.extractfile(path)
+        f = DISK_CACHE.extractfile(f"./{path}.br")
         return web.Response(text=brotli.decompress(f.read()).decode(),
                             content_type="text/html")
     except KeyError:
         response = await fetch_from_origin(path)
-    return web.Response(text=response, content_type="text/html")
+        return web.Response(text=response, content_type="text/html")
 
 
 app.add_routes(routes)
