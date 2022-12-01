@@ -17,7 +17,7 @@ CLIENTS = set()
 
 @lru_cache(maxsize=3)
 def measureMultiplePing(addresses):
-    if addresses == []: return {}
+    if len(addresses) == 0: return {}
     cmd = ["scamper", "-i", "-c", "ping -c 1", *addresses]
     scamp = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     result = scamp.stdout.read().decode()
@@ -50,7 +50,7 @@ async def updateClients(request):
 
 @routes.get("/ping")
 async def ping(request):
-    return web.json_response(measureMultiplePing(sorted(CLIENTS)))
+    return web.json_response(measureMultiplePing(tuple(sorted(CLIENTS))))
 
 
 @routes.post("/preload")
