@@ -10,6 +10,7 @@ import requests
 import json
 from urllib.request import urlopen
 from math import radians, cos, sin, asin, sqrt, inf
+import geoip2.database
 import yappi
 
 def get_ip_address():
@@ -78,12 +79,14 @@ def distance_between_locations(loc1, loc2):
     return(c * r)
 
 def find_location_coordinates(ip):
-    url = 'https://geolocation-db.com/jsonp/' + ip
-    response = urlopen(url)
-    data = json.load(response)
-
-    lat = float(data['latitude'])
-    lon = float(data['longitude'])
+    # url = 'https://geolocation-db.com/jsonp/' + ip
+    # response = urlopen(url)
+    # data = json.load(response)
+    with geoip2.database.Reader('GeoLite2-City.mmdb') as reader:
+        response = reader.city(ip)
+    
+    lat = float(response.location.latitude)
+    lon = float(response.location.longitude)
     
     return (lat, lon)
 
