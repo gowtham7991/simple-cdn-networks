@@ -28,7 +28,7 @@ ORIGIN = "cs5700cdnorigin.ccs.neu.edu"
 ORIGIN_IP = socket.gethostbyname(ORIGIN)
 CLIENT_REPLICA_ROUTING_TABLE = {}
 REPLICA_SERVERS = {'139.144.30.25' : {'latitude' : 37.751, 'longitude' : -97.822},
-                }
+                  }
 
 # '173.255.210.124' : 'proj4-repl2.5700.network',
 # '139.144.69.56' : 'proj4-repl3.5700.network',
