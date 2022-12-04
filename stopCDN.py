@@ -14,16 +14,16 @@ def parse_args():
     parser.add_argument("-p",
                         "--port",
                         metavar=port,
-                        required=True,
+                        required=False,
                         help='Port to listen on')
     parser.add_argument("-o", "--origin",
                         metavar=origin,
-                        required=True, 
+                        required=False, 
                         help='Origin server')
     parser.add_argument("-n",
                         "--name",
                         metavar=name,
-                        required=True,
+                        required=False,
                         help='CDN specific name')
     parser.add_argument("-u",
                         "--username",
@@ -80,10 +80,12 @@ def stopAll():
         stopCDN(replica)
 
 # send stop to the server!
-def stopCDN(replica:str):
-    cmd = "curl -X POST " + replica + "/stop"
-    os.system(replica)
+def stopCDN(replicaName:str):
+    cmd = "pkill python3; pkill rust"
+    ssh = f"ssh -i {keyfile} {username}@{replicaName} '{cmd}'"
+    os.system(ssh)
     
 if __name__ == "__main__":
     args = parse_args()
-    stopAll()
+    for replica in REPLICA_SERVERS:
+        stopCDN(replica)

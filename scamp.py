@@ -39,7 +39,6 @@ def measureMultiplePing(addresses):
     return {client:{"rtt":rtt} for client, rtt in zip(addresses,times)}
 
 
-
 def launch():
     list_files = subprocess.run(["scamper", "-P", str(port), "-D"])
 

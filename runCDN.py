@@ -25,7 +25,7 @@ def parse_args():
                         "--name",
                         
                         metavar=name,
-                        required=True,
+                        required=False,
                         help='CDN specific name')
     parser.add_argument("-u",
                         "--username",
@@ -40,14 +40,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def runCMD(replica, runCMD):
-    cmd = f"ssh -i {keyfile} {username}@{replica} '{runCMD}'"
-    logging.debug(f"Sending command {cmd} to {replica}")
-    os.system(cmd)
+def runCDN(replicaName):
+    cmd = f"./target/release/server"
+    ssh = f"ssh -i {keyfile} {username}@{replicaName} '{cmd}'"
+    os.system(ssh)
+    
 
 
 if __name__ == "__main__":
     args = parse_args()
     for replica in REPLICA_SERVERS:
-        #send the run command to all replica servers
-        runCMD(replica, f"./httpserver -p {port} -o {origin}")
+        runCDN(replica)

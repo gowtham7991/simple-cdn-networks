@@ -18,16 +18,16 @@ def parse_args():
     parser.add_argument("-p",
                         "--port",
                         metavar=port,
-                        required=True,
+                        required=False,
                         help='Port to listen on')
     parser.add_argument("-o", "--origin",
                         metavar=origin,
-                        required=True, 
+                        required=False, 
                         help='Origin server')
     parser.add_argument("-n",
                         "--name",
                         metavar=name,
-                        required=True,
+                        required=False,
                         help='CDN specific name')
     parser.add_argument("-u",
                         "--username",
@@ -51,19 +51,24 @@ def deployCommand(dns_server: List[str], replica_servers: List[str]):
         os.system(cmd)
         logging.info(f"Deployed DNS server on {server}")
 
+def compileRustServer(replicaName):
+    cmd  = "cargo build --release && upx --best --lzma target/release/server"
+    ssh = f"ssh -i {keyfile} {username}@{replicaName} '{cmd}'"
+    os.system(ssh)
+
+
 #copy files to replicas
-def copyToReplica(replicaName, username, port):
-    # add the files as needed 
-    scpCmd = "scp -i sshKey -p " + port + "localhost:/home/dkgp/httpserver.py " + username + "@" + replicaName + ":/home/dkgp/test/"
+def copyToReplica(replicaName):
+    # copy server
+    scpCmd = f"scp -i {keyfile} /target/release/server {username}@{replicaName}:/home/dkgp/target/release/server"
     os.system(scpCmd)
-    
-    scpCmd = "scp -i sshKey -p " + port + "localhost:/home/dkgp/disk.tar " + username + "@" + replicaName + ":/home/dkgp/test/"
+    # copy data cache into replica
+    scpCmd = f"scp -i {keyfile}  -r disk/ {username}@{replicaName}:disk/"
     os.system(scpCmd)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
-    for replica in REPLICA_SERVERS:
-        copyToReplica(replica, username, port)
-    deployCommand(DNS_SERVERS, REPLICA_SERVERS)
+    for replicaName in REPLICA_SERVERS:
+        copyToReplica(replicaName)
