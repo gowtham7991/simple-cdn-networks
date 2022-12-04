@@ -7,7 +7,7 @@ keyfile = "example.priv"
 origin = "origin"
 
 DNS_SERVERS = ["proj4-dns.5700.network"]
-REPLICA_SERVERS = ["proj4-repl1.5700.network"]
+REPLICA_SERVERS = ["proj4-repl2.5700.network"]
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Deploy CDN')
@@ -82,7 +82,8 @@ def stopAll():
 # send stop to the server!
 def stopCDN(replicaName:str):
     cmd = "pkill python3; pkill rust"
-    ssh = f"ssh -i {keyfile} {username}@{replicaName} '{cmd}'"
+    test = "touch HelloThere.txt" 
+    ssh = f"ssh -i {args.keyfile} {args.username}@{replicaName} '{test}'"
     os.system(ssh)
     
 if __name__ == "__main__":

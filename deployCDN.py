@@ -7,11 +7,11 @@ from typing import List
 username = ""
 port = 000
 name = "name"
-keyfile = "example.priv"
+keyfile = ""
 origin = "origin"
 
 DNS_SERVERS = ["proj4-dns.5700.network"]
-REPLICA_SERVERS = ["proj4-repl1.5700.network"]
+REPLICA_SERVERS = ["proj4-repl2.5700.network"]
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Deploy CDN')
@@ -34,6 +34,7 @@ def parse_args():
                         metavar=username,
                         required=True,
                         help='Username used for login')
+    
     parser.add_argument("-i",
                         "--keyfile",
                         metavar=keyfile,
@@ -53,17 +54,23 @@ def deployCommand(dns_server: List[str], replica_servers: List[str]):
 
 def compileRustServer(replicaName):
     cmd  = "cargo build --release && upx --best --lzma target/release/server"
-    ssh = f"ssh -i {keyfile} {username}@{replicaName} '{cmd}'"
+    ssh = f"ssh -i {args.keyfile} {args.username}@{replicaName} '{cmd}'"
     os.system(ssh)
-
 
 #copy files to replicas
 def copyToReplica(replicaName):
+    
+    # TEST CODE
+    scpCmd = f"scp -i {args.keyfile} README.md {args.username}@{replicaName}:/home/dkgp/test.md"
+    os.system(scpCmd)
+    return
+    
     # copy server
-    scpCmd = f"scp -i {keyfile} /target/release/server {username}@{replicaName}:/home/dkgp/target/release/server"
+    scpCmd = f"scp -i {args.keyfile} /target/release/server {args.username}@{replicaName}:/home/dkgp/target/release/server"
+    print(scpCmd)
     os.system(scpCmd)
     # copy data cache into replica
-    scpCmd = f"scp -i {keyfile}  -r disk/ {username}@{replicaName}:disk/"
+    scpCmd = f"scp -i {args.keyfile}  disk/ {args.username}@{replicaName}:disk/"
     os.system(scpCmd)
 
 

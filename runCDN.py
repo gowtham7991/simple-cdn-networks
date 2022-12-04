@@ -1,5 +1,7 @@
 import os, signal, subprocess, argparse
 import logging
+import threading
+import requests
 
 username = ""
 port = 000
@@ -19,7 +21,7 @@ def parse_args():
                         help='Port to listen on')
     parser.add_argument("-o", "--origin",
                         metavar=origin,
-                        required=True, 
+                        required=False, 
                         help='Origin server')
     parser.add_argument("-n",
                         "--name",
@@ -30,24 +32,30 @@ def parse_args():
     parser.add_argument("-u",
                         "--username",
                         metavar=username,
-                        required=True,
+                        required=False,
                         help='Username used for login')
     parser.add_argument("-i",
                         "--keyfile",
                         metavar=keyfile,
-                        required=True,
+                        required=False,
                         help='Keyfile used for login')
     return parser.parse_args()
 
 
 def runCDN(replicaName):
     cmd = f"./target/release/server"
-    ssh = f"ssh -i {keyfile} {username}@{replicaName} '{cmd}'"
+    ssh = f"ssh -i {args.keyfile} {args.username}@{replicaName} '{cmd}'"
     os.system(ssh)
     
-
-
+def preload(replicaName):
+    with open("preload_files.txt","r") as f:
+        preload_files = f.read().replace("\n", ";")
+    print(preload_files)
+    print("sending request")
+    requests.post(f"http://{replica}:{port}/preload",data=preload_files)
+    
 if __name__ == "__main__":
     args = parse_args()
     for replica in REPLICA_SERVERS:
-        runCDN(replica)
+        #runCDN(replica)
+        threading.Thread(target=preload,args=(replica,)).start()
