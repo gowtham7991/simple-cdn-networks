@@ -18,27 +18,47 @@ async fn main() {
         std::env::set_var("RUST_LOG", "server=debug");
     }
     pretty_env_logger::init_timed();
+    let ping = warp::post()
+        .and(warp::path!("ping"))
+        .and(warp::body::bytes())
+        .map(|body: Bytes| String::from_utf8_lossy(&body).to_string())
+        .and_then(ping);
+
     let beacon = warp::path!("grading" / "beacon").map(|| StatusCode::NO_CONTENT);
-    let preload =
-        warp::path!("preload")
-            .and(warp::body::bytes())
-            .and_then(|body: Bytes| async move {
-                let body = String::from_utf8(body.to_vec()).unwrap();
-                preload(body).await
-            });
+    let preload = warp::path!("preload")
+        .and(warp::body::bytes())
+        .map(|body: Bytes| String::from_utf8_lossy(&body).to_string())
+        .and_then(preload);
     let root = warp::path::end().and_then(|| proxy(String::new()));
     let proxy = warp::path!(String).and_then(proxy);
 
     let routes = root
         .or(preload)
         .or(beacon)
+        .or(ping)
         .or(proxy)
         .with(warp::log("server"));
     warp::serve(routes).run(([0, 0, 0, 0], 25015)).await;
 }
+async fn ping(ip_list: String) -> Result<impl warp::Reply, warp::Rejection> {
+    let scamper = std::process::Command::new("scamper")
+        .args(["-i", "-O", "json", "-c", "ping -c 1"])
+        .args(ip_list.split_whitespace())
+        .output();
+    match scamper {
+        Ok(output) => Ok(warp::reply::with_status(
+            String::from_utf8_lossy(&output.stdout).to_string(),
+            StatusCode::OK,
+        )),
+        Err(e) => Ok(warp::reply::with_status(
+            e.to_string(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )),
+    }
+}
 
 async fn fetch_from_origin(path: &str) -> Result<String, reqwest::Error> {
-    dbg!(format!("Fetch: {}",&path));
+    dbg!(format!("Fetch: {}", &path));
     let response = reqwest::get(format!("{}{}", ORIGIN, path)).await?;
     return response.text().await;
 }
