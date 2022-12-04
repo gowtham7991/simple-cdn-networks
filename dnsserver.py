@@ -11,7 +11,6 @@ import json
 from urllib.request import urlopen
 from math import radians, cos, sin, asin, sqrt, inf
 import geoip2.database
-import yappi
 
 def get_ip_address():
     """Get local IP address.
@@ -134,22 +133,11 @@ def process_request(udp_sock, message, address):
     logging.debug(f"Sending {repsonse} to {address}")
     udp_sock.sendto(repsonse.pack(), address)
 
-def update_client_replica_routing():
-    while True:
-        for replica in REPLICA_SERVERS.keys():
-            response = requests.get('http://' + replica + ':25015/ping')
-            data = response.json()
-
-            for client in data:
-                if data[client] < CLIENT_REPLICA_ROUTING_TABLE[client]['latency']:
-                    CLIENT_REPLICA_ROUTING_TABLE[client]['replica_server'] = replica
-                    CLIENT_REPLICA_ROUTING_TABLE[client]['latency'] = data[client] 
-        time.sleep(UPDATE_ROUTING_TABLE_FREQUENCY)
-
 def ping_replica_servers():
     while True:
         for replica in REPLICA_SERVERS.keys():
-            requests.post('http:/new_func/' + replica + ':25015/ping', json = list(CLIENT_REPLICA_ROUTING_TABLE.keys()))
+            response = requests.post('http:/new_func/' + replica + ':25015/ping', json = " ".join(list(CLIENT_REPLICA_ROUTING_TABLE.keys())))
+            print(response.json())
         time.sleep(PING_REPLICA_SERVERS_FREQUENCY)
     
 if __name__ == "__main__":
@@ -157,9 +145,5 @@ if __name__ == "__main__":
     args = parse_args()
     
     ping_thread = threading.Thread(target=ping_replica_servers)
-    update_thread = threading.Thread(target=update_client_replica_routing)
-
     ping_thread.start()
-    update_thread.start()
-    
     serve_dns(args.port)
