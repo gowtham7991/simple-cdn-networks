@@ -1,11 +1,11 @@
-use std::{collections::HashMap, io::Read, thread::sleep};
-
+use futures;
 use lazy_static::lazy_static;
 use pretty_env_logger;
+use std::{collections::HashMap, io::Read, thread::sleep };
 use tokio::sync::RwLock;
 use warp::{
     hyper::{body::Bytes, StatusCode},
-    Filter,
+    Filter
 };
 const BUFFER_SIZE: usize = 1 << 13;
 const ORIGIN: &str = "http://cs5700cdnorigin.ccs.neu.edu:8080/";
@@ -58,28 +58,42 @@ async fn ping(ip_list: String) -> Result<impl warp::Reply, warp::Rejection> {
 }
 
 async fn fetch_from_origin(path: &str) -> Result<String, reqwest::Error> {
-    dbg!(format!("Fetch: {}", &path));
     let response = reqwest::get(format!("{}{}", ORIGIN, path)).await?;
     return response.text().await;
 }
 
 async fn preload(body: String) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut ram_cache = RAM_CACHE.write().await;
-    for path in body.split(";").into_iter() {
-        let response = fetch_from_origin(&path).await.unwrap();
-        ram_cache.insert(path.to_string(), compress(&response));
-    }
+    log::debug!("preload");
+    tokio::spawn(async move {
+        let contents = futures::future::join_all(body.split(";").map(fetch_from_origin))
+            .await
+            .into_iter()
+            .map(|result| result.unwrap());
+        let mut ram_cache = RAM_CACHE.write().await;
+        let compressed_contents = futures::future::join_all(
+            contents.map(|content| tokio::spawn(async move { compress(content).await })),
+        )
+        .await
+        .into_iter()
+        .map(|result| result.unwrap());
+
+        body.split(";")
+            .zip(compressed_contents)
+            .for_each(|(path, content)| {
+                ram_cache.insert(path.to_string(), content);
+            });
+    });
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn compress(content: &String) -> Vec<u8> {
-    brotli::CompressorReader::new(content.as_bytes(), BUFFER_SIZE, 11, 24)
+async fn compress(content: String) -> Vec<u8> {
+    brotli::CompressorReader::new(content.as_bytes(), BUFFER_SIZE, 11, 22)
         .bytes()
         .map(|x| x.unwrap())
         .collect()
 }
 
-fn decompress(content: &Vec<u8>) -> String {
+async fn decompress(content: &Vec<u8>) -> String {
     let mut decompressed = String::new();
     brotli::Decompressor::new(&content[..], BUFFER_SIZE)
         .read_to_string(&mut decompressed)
@@ -88,13 +102,16 @@ fn decompress(content: &Vec<u8>) -> String {
 }
 async fn proxy(path: String) -> Result<impl warp::Reply, warp::Rejection> {
     sleep(std::time::Duration::from_secs(1));
-    let ram_cache = RAM_CACHE.read().await;
-    if ram_cache.contains_key(&path) {
-        Ok(decompress(ram_cache.get(&path).unwrap()))
-    } else {
-        match tokio::fs::read(format!("./disk/{}", path)).await {
-            Ok(content) => Ok(decompress(&content)),
-            Err(_) => Ok(fetch_from_origin(&path).await.unwrap()),
+    if let Ok(ram_cache) = RAM_CACHE.try_read() {
+        if let Some(compressed) = ram_cache.get(&path) {
+            return Ok(warp::reply::html(decompress(&compressed).await));
         }
+    }
+    if let Ok(compressed) = tokio::fs::read(format!("./disk/{}", path)).await {
+        Ok(warp::reply::html(decompress(&compressed).await))
+    } else if let Ok(response) = fetch_from_origin(&path).await {
+        Ok(warp::reply::html(response))
+    } else {
+        Err(warp::reject::not_found())
     }
 }
