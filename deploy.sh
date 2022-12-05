@@ -4,7 +4,7 @@ preload=`cat ./preload_files.txt|tr '\n' ';'`
 for repl in "${REPLICA_SERVERS[@]}"
 do
 	echo "Deploying to $repl"
-	ssh -i ~/.ssh/id_ed25519 dkgp@$repl "pkill server"
+	ssh -i ~/.ssh/id_ed25519 dkgp@$repl "pkill -u dkgp server"
 	# scp -i ~/.ssh/id_ed25519 -r disk/ dkgp@$repl: 2>/dev/null &
 	scp -i ~/.ssh/id_ed25519 -r server/target/release/server dkgp@$repl:
 	ssh -i ~/.ssh/id_ed25519 dkgp@$repl "screen -d -m ./server;" 

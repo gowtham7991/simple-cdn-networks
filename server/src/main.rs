@@ -1,11 +1,11 @@
 use futures;
 use lazy_static::lazy_static;
 use pretty_env_logger;
-use std::{collections::HashMap, io::Read, thread::sleep };
+use std::{collections::HashMap, io::Read, thread::sleep};
 use tokio::sync::RwLock;
 use warp::{
     hyper::{body::Bytes, StatusCode},
-    Filter
+    Filter,
 };
 const BUFFER_SIZE: usize = 1 << 13;
 const ORIGIN: &str = "http://cs5700cdnorigin.ccs.neu.edu:8080/";
@@ -15,7 +15,7 @@ lazy_static! {
 #[tokio::main]
 async fn main() {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "server=debug");
+        std::env::set_var("RUST_LOG", "server=info");
     }
     pretty_env_logger::init_timed();
     let ping = warp::post()
@@ -57,31 +57,37 @@ async fn ping(ip_list: String) -> Result<impl warp::Reply, warp::Rejection> {
     }
 }
 
-async fn fetch_from_origin(path: &str) -> Result<String, reqwest::Error> {
-    let response = reqwest::get(format!("{}{}", ORIGIN, path)).await?;
-    return response.text().await;
+async fn fetch_from_origin(path: &str) -> String {
+    log::debug!("fetching from origin: {}", path);
+    let mut response = reqwest::get(format!("{}{}", ORIGIN, path))
+        .await
+        .expect(format!("GET {} fail", path).as_str());
+    while response.status() != StatusCode::OK {
+        log::info!("{} - status {}, retrying in 10s", path, response.status());
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        response = reqwest::get(format!("{}{}", ORIGIN, path)).await.expect(
+            format!(
+                "GET {} fail second time - status {}",
+                path,
+                response.status()
+            )
+            .as_str(),
+        );
+    }
+    return response.text().await.unwrap();
 }
 
 async fn preload(body: String) -> Result<impl warp::Reply, warp::Rejection> {
-    log::debug!("preload");
+    let contents = futures::future::join_all(body.split(";").map(fetch_from_origin)).await;
     tokio::spawn(async move {
-        let contents = futures::future::join_all(body.split(";").map(fetch_from_origin))
+        for (path, content) in body.split(";").map(|x| x.to_string()).zip(contents) {
+            tokio::spawn(async move {
+                let compressed = compress(content).await;
+                RAM_CACHE.write().await.insert(path, compressed);
+            })
             .await
-            .into_iter()
-            .map(|result| result.unwrap());
-        let mut ram_cache = RAM_CACHE.write().await;
-        let compressed_contents = futures::future::join_all(
-            contents.map(|content| tokio::spawn(async move { compress(content).await })),
-        )
-        .await
-        .into_iter()
-        .map(|result| result.unwrap());
-
-        body.split(";")
-            .zip(compressed_contents)
-            .for_each(|(path, content)| {
-                ram_cache.insert(path.to_string(), content);
-            });
+            .unwrap();
+        }
     });
     Ok(StatusCode::NO_CONTENT)
 }
@@ -104,14 +110,16 @@ async fn proxy(path: String) -> Result<impl warp::Reply, warp::Rejection> {
     sleep(std::time::Duration::from_secs(1));
     if let Ok(ram_cache) = RAM_CACHE.try_read() {
         if let Some(compressed) = ram_cache.get(&path) {
+            log::info!("RAM hit {}", path);
             return Ok(warp::reply::html(decompress(&compressed).await));
         }
     }
     if let Ok(compressed) = tokio::fs::read(format!("./disk/{}", path)).await {
+        log::info!("DISK hit {}", path);
         Ok(warp::reply::html(decompress(&compressed).await))
-    } else if let Ok(response) = fetch_from_origin(&path).await {
-        Ok(warp::reply::html(response))
     } else {
-        Err(warp::reject::not_found())
+        let response = fetch_from_origin(path.as_str()).await;
+        log::info!("Fetched from origin: {}", path);
+        Ok(warp::reply::html(response))
     }
 }
