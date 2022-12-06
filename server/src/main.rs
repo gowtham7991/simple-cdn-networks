@@ -80,16 +80,21 @@ async fn fetch_from_origin(path: &str) -> String {
 
 async fn preload(body: String) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::spawn(async move {
-        for path in body.split(";").filter(|&x| x!="").map(|x| x.to_string()) {
-            tokio::spawn(async move {
-                let compressed = fetch_from_origin(path.as_str()).then(compress).await;
-                log::debug!("Cached {} in RAM w/Size = {}", path, compressed.len());
-                RAM_CACHE.write().await.insert(path, compressed);
-            })
-            .await
-            .unwrap();
+        for path in body.split(";").filter(|&x| x != "").map(|x| x.to_string()) {
+            let compressed = fetch_from_origin(path.as_str()).then(compress).await;
+            log::debug!("Cached {} in RAM w/Size = {}", path, compressed.len());
+            RAM_CACHE.write().await.insert(path, compressed);
         }
-        log::debug!("Preload finished");
+        RAM_CACHE.write().await.shrink_to_fit();
+        log::info!(
+            "Preload finished; RAM usage {}",
+            RAM_CACHE
+                .read()
+                .await
+                .iter()
+                .map(|(k, v)| k.len() + v.len())
+                .sum::<usize>()
+        );
     });
     Ok(StatusCode::NO_CONTENT)
 }
