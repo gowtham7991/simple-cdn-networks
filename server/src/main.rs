@@ -1,4 +1,4 @@
-use futures;
+use futures::{self, FutureExt};
 use lazy_static::lazy_static;
 use pretty_env_logger;
 use std::{collections::HashMap, io::Read, thread::sleep};
@@ -12,8 +12,9 @@ const ORIGIN: &str = "http://cs5700cdnorigin.ccs.neu.edu:8080/";
 lazy_static! {
     static ref RAM_CACHE: RwLock<HashMap<String, Vec<u8>>> = RwLock::new(HashMap::new());
 }
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
+    RAM_CACHE.write().await.reserve(221);
     if std::env::var_os("RUST_LOG").is_none() {
         std::env::set_var("RUST_LOG", "server=info");
     }
@@ -78,16 +79,17 @@ async fn fetch_from_origin(path: &str) -> String {
 }
 
 async fn preload(body: String) -> Result<impl warp::Reply, warp::Rejection> {
-    let contents = futures::future::join_all(body.split(";").map(fetch_from_origin)).await;
     tokio::spawn(async move {
-        for (path, content) in body.split(";").map(|x| x.to_string()).zip(contents) {
+        for path in body.split(";").filter(|&x| x=="").map(|x| x.to_string()) {
             tokio::spawn(async move {
-                let compressed = compress(content).await;
+                let compressed = fetch_from_origin(path.as_str()).then(compress).await;
+                log::debug!("Cached {} in RAM w/Size = {}", path, compressed.len());
                 RAM_CACHE.write().await.insert(path, compressed);
             })
             .await
             .unwrap();
         }
+        log::debug!("Preload finished");
     });
     Ok(StatusCode::NO_CONTENT)
 }
