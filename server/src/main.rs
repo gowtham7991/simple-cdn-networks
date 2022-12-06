@@ -1,7 +1,7 @@
 use futures::{self, FutureExt};
 use lazy_static::lazy_static;
 use pretty_env_logger;
-use std::{collections::HashMap, io::Read, thread::sleep};
+use std::{collections::HashMap, io::Read};
 use tokio::sync::RwLock;
 use warp::{
     hyper::{body::Bytes, StatusCode},
@@ -12,7 +12,7 @@ const ORIGIN: &str = "http://cs5700cdnorigin.ccs.neu.edu:8080/";
 lazy_static! {
     static ref RAM_CACHE: RwLock<HashMap<String, Vec<u8>>> = RwLock::new(HashMap::new());
 }
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() {
     RAM_CACHE.write().await.reserve(221);
     if std::env::var_os("RUST_LOG").is_none() {
@@ -80,7 +80,7 @@ async fn fetch_from_origin(path: &str) -> String {
 
 async fn preload(body: String) -> Result<impl warp::Reply, warp::Rejection> {
     tokio::spawn(async move {
-        for path in body.split(";").filter(|&x| x=="").map(|x| x.to_string()) {
+        for path in body.split(";").filter(|&x| x!="").map(|x| x.to_string()) {
             tokio::spawn(async move {
                 let compressed = fetch_from_origin(path.as_str()).then(compress).await;
                 log::debug!("Cached {} in RAM w/Size = {}", path, compressed.len());
@@ -109,7 +109,6 @@ async fn decompress(content: &Vec<u8>) -> String {
     decompressed
 }
 async fn proxy(path: String) -> Result<impl warp::Reply, warp::Rejection> {
-    sleep(std::time::Duration::from_secs(1));
     if let Ok(ram_cache) = RAM_CACHE.try_read() {
         if let Some(compressed) = ram_cache.get(&path) {
             log::info!("RAM hit {}", path);
