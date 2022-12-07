@@ -1,24 +1,38 @@
 use futures::{self, FutureExt};
 use lazy_static::lazy_static;
 use pretty_env_logger;
-use std::{collections::HashMap, io::Read};
+use std::{
+    collections::HashMap,
+    io::Read
+};
 use tokio::sync::RwLock;
 use warp::{
     hyper::{body::Bytes, StatusCode},
     Filter,
 };
 const BUFFER_SIZE: usize = 1 << 13;
-const ORIGIN: &str = "http://cs5700cdnorigin.ccs.neu.edu:8080/";
 lazy_static! {
     static ref RAM_CACHE: RwLock<HashMap<String, Vec<u8>>> = RwLock::new(HashMap::new());
+    static ref ORIGIN: RwLock<String> = RwLock::new(String::new());
 }
+
 #[tokio::main]
 async fn main() {
-    RAM_CACHE.write().await.reserve(221);
     if std::env::var_os("RUST_LOG").is_none() {
         std::env::set_var("RUST_LOG", "server=info");
     }
     pretty_env_logger::init_timed();
+
+    let mut args = std::env::args();
+
+    let port = args
+        .nth(2)
+        .expect("Port must be provided")
+        .parse::<u16>()
+        .expect("port must be a number");
+    let origin = args.nth(1).expect("Origin must be provided");
+    ORIGIN.write().await.push_str(&origin);
+
     let ping = warp::post()
         .and(warp::path!("ping"))
         .and(warp::body::bytes())
@@ -39,7 +53,7 @@ async fn main() {
         .or(ping)
         .or(proxy)
         .with(warp::log("server"));
-    warp::serve(routes).run(([0, 0, 0, 0], 25015)).await;
+    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
 }
 async fn ping(ip_list: String) -> Result<impl warp::Reply, warp::Rejection> {
     let scamper = std::process::Command::new("scamper")
@@ -59,14 +73,15 @@ async fn ping(ip_list: String) -> Result<impl warp::Reply, warp::Rejection> {
 }
 
 async fn fetch_from_origin(path: &str) -> String {
-    log::debug!("fetching from origin: {}", path);
-    let mut response = reqwest::get(format!("{}{}", ORIGIN, path))
+    log::debug!("Fetching from origin: {}", path);
+    let url = format!("{}/{}", ORIGIN.read().await, path);
+    let mut response = reqwest::get(&url)
         .await
         .expect(format!("GET {} fail", path).as_str());
     while response.status().is_server_error() {
         log::info!("{} - status {}, retrying in 10s", path, response.status());
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-        response = reqwest::get(format!("{}{}", ORIGIN, path)).await.expect(
+        response = reqwest::get(&url).await.expect(
             format!(
                 "GET {} fail second time - status {}",
                 path,
@@ -113,6 +128,7 @@ async fn decompress(content: &Vec<u8>) -> String {
         .expect("decompress failed");
     decompressed
 }
+
 async fn proxy(path: String) -> Result<impl warp::Reply, warp::Rejection> {
     if let Ok(ram_cache) = RAM_CACHE.try_read() {
         if let Some(compressed) = ram_cache.get(&path) {
