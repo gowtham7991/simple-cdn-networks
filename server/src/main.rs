@@ -63,7 +63,7 @@ async fn fetch_from_origin(path: &str) -> String {
     let mut response = reqwest::get(format!("{}{}", ORIGIN, path))
         .await
         .expect(format!("GET {} fail", path).as_str());
-    while response.status() != StatusCode::OK {
+    while response.status().is_server_error() {
         log::info!("{} - status {}, retrying in 10s", path, response.status());
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         response = reqwest::get(format!("{}{}", ORIGIN, path)).await.expect(
