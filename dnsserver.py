@@ -106,7 +106,6 @@ def find_location_coordinates(ip):
 
 def resolve(client_address: Tuple[str, int]) -> str:
     client_ip = client_address[0]
-    CLIENTS.add(client_ip)
 
     if client_ip in CLIENT_REPLICA_ROUTING_TABLE:
         avg = lambda replica_ip: CLIENT_REPLICA_ROUTING_TABLE[client_ip][
@@ -114,6 +113,8 @@ def resolve(client_address: Tuple[str, int]) -> str:
                 replica_ip]["samples"]
         return min(CLIENT_REPLICA_ROUTING_TABLE[client_ip], key=avg)
     else:
+        CLIENTS.add(client_ip)
+        ping_replica_servers()
         return find_closest_replica_server(client_ip)
 
 
@@ -151,13 +152,15 @@ def process_request(udp_sock, message, address):
     question = str(query.q).split()[0][1:-1]
     repsonse = DNSRecord(DNSHeader(id=query.header.id, qr=1, aa=0, ra=1),
                          q=DNSQuestion(question),
-                         a=RR(question, rdata=A(resolve(address))))
+                         a=RR(question, rdata=A(resolve(address)),ttl=600))
     logging.debug(f"Sending {repsonse} to {address}")
     udp_sock.sendto(repsonse.pack(), address)
 
 
 def update_latency(output):
     if output["type"] != "ping": return
+    is_ping_blocked  = "avg" not in output["statistics"]
+    if is_ping_blocked: return
     client = output["dst"]
     replica = output["src"]
     latency = output["statistics"]["avg"]
@@ -169,21 +172,24 @@ def update_latency(output):
     CLIENT_REPLICA_ROUTING_TABLE[client][replica]["samples"] += 1
 
 
-def ping_replica_servers():
+def ping_thread():
     while True:
-        for replica in REPLICA_SERVERS:
-            response = requests.post('http://' + replica + ':25015/ping',
-                                     data=" ".join(CLIENTS))
-            for output in response.text.split("\n"):
-                if output != "":
-                    update_latency(json.loads(output))
+        ping_replica_servers()
         time.sleep(PING_REPLICA_SERVERS_FREQUENCY)
+
+
+def ping_replica_servers():
+    for replica in REPLICA_SERVERS:
+        response = requests.post('http://' + replica + ':25015/ping',
+                                 data=" ".join(CLIENTS))
+        for output in response.text.split("\n"):
+            if output != "":
+                update_latency(json.loads(output))
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
 
-    ping_thread = threading.Thread(target=ping_replica_servers)
-    ping_thread.start()
+    threading.Thread(target=ping_thread).start()
     serve_dns(args.port)
