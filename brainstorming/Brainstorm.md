@@ -1,3 +1,0 @@
-# CDN
-
-![Architecture](Architecture.svg)
