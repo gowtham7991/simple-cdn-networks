@@ -19,7 +19,7 @@ CLIENTS = set()
 PING_CACHE = {}
 PING_CACHE_EXPIRY = 100  # seconds
 
-
+# uses scamper to ping multiple clients and parses the response
 def measureMultiplePing(addresses):
     if len(addresses) == 0: return {}
     if addresses in PING_CACHE and PING_CACHE[addresses][
@@ -44,7 +44,7 @@ def measureMultiplePing(addresses):
     }
     return result
 
-
+# fetches content from the origin
 async def fetch_from_origin(path):
     logging.debug(f"Fetching {path} from origin")
     async with ClientSession() as session:
@@ -52,7 +52,7 @@ async def fetch_from_origin(path):
                 f"http://cs5700cdnorigin.ccs.neu.edu:8080/{path}") as resp:
             return await resp.text()
 
-
+# responds to the ping call for the clients with the latencies
 @routes.post("/ping")
 async def updateClients(request):
     global CLIENTS
@@ -65,7 +65,7 @@ async def updateClients(request):
 async def ping(request):
     return web.json_response(measureMultiplePing(tuple(sorted(CLIENTS))))
 
-
+# preloads the cache with the compressed content from the origin 
 @routes.post("/preload")
 async def preload(request):
     global RAM_CACHE

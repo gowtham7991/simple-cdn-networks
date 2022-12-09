@@ -22,6 +22,8 @@ CLIENTS = {
     "35.175.146.183", "52.53.228.21", "18.192.115.31", "18.134.159.46",
     "43.206.138.184"
 }
+
+# client mapping with the best replica server
 CLIENT_REPLICA_ROUTING_TABLE = defaultdict(
     lambda: defaultdict(lambda: {
         "sum": 0,
@@ -40,7 +42,7 @@ REPLICA_SERVERS = {
     '170.187.240.5',
 }
 
-
+# returns the ip address of the current machine
 def get_ip_address():
     """Get local IP address.
 
@@ -57,7 +59,7 @@ def get_ip_address():
 UPDATE_ROUTING_TABLE_FREQUENCY = 300
 PING_REPLICA_SERVERS_FREQUENCY = 100
 
-
+# maps the geographically closest repliva server to the client
 def find_closest_replica_server(source_ip):
     DEFAULT_REPLICA_SERVER = '139.144.30.25'
     source_coordinates = find_location_coordinates(source_ip)
@@ -66,7 +68,7 @@ def find_closest_replica_server(source_ip):
                    source_coordinates, find_location_coordinates(repl)),
                default=DEFAULT_REPLICA_SERVER)
 
-
+# calculates the distance between 2 location coordinates
 def distance_between_locations(loc1, loc2):
 
     # The math module contains a function named
@@ -89,12 +91,9 @@ def distance_between_locations(loc1, loc2):
     # calculate the result
     return (c * r)
 
-
+# returns the latitude and longitude of an ip address
 @lru_cache(maxsize=128)
 def find_location_coordinates(ip):
-    # url = 'https://geolocation-db.com/jsonp/' + ip
-    # response = urlopen(url)
-    # data = json.load(response)
     with geoip2.database.Reader('GeoLite2-City.mmdb') as reader:
         response = reader.city(ip)
 
@@ -103,7 +102,7 @@ def find_location_coordinates(ip):
 
     return (lat, lon)
 
-
+# maps a client to a replica server based on geography and active measurement strategies
 def resolve(client_address: Tuple[str, int]) -> str:
     client_ip = client_address[0]
 
@@ -116,7 +115,6 @@ def resolve(client_address: Tuple[str, int]) -> str:
         CLIENTS.add(client_ip)
         ping_replica_servers()
         return find_closest_replica_server(client_ip)
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DNS Server')
@@ -131,7 +129,7 @@ def parse_args():
                         help='CDN specific name')
     return parser.parse_args()
 
-
+# DNS handler which listens to client queries and responds with a DNS response
 def serve_dns(port):
 
     localIP = get_ip_address()
@@ -145,7 +143,7 @@ def serve_dns(port):
         threading.Thread(target=process_request,
                          args=(udp_sock, message, address)).start()
 
-
+# DNS query parser
 def process_request(udp_sock, message, address):
     query = DNSRecord.parse(message)
     logging.debug(f"Received {query} from {address}")
@@ -157,6 +155,7 @@ def process_request(udp_sock, message, address):
     udp_sock.sendto(repsonse.pack(), address)
 
 
+# pings the replica servers with the client set and updates the client mapping with the least server with least latency
 def update_latency(output):
     if output["type"] != "ping": return
     is_ping_blocked  = "avg" not in output["statistics"]
@@ -177,7 +176,7 @@ def ping_thread():
         ping_replica_servers()
         time.sleep(PING_REPLICA_SERVERS_FREQUENCY)
 
-
+# calls the ping endpoint of the replica server with the client set
 def ping_replica_servers():
     for replica in REPLICA_SERVERS:
         response = requests.post('http://' + replica + ':25015/ping',
